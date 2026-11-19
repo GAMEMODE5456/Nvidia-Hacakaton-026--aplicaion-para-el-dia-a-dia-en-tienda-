@@ -1,0 +1,52 @@
+cat << 'EOF' > .gitignore
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Variables de entorno y credenciales
+.env
+.env.*
+!.env.example
+
+# Frontend
+node_modules/
+dist/
+build/
+
+# Modelos y pesos
+*.pt
+*.pth
+*.onnx
+*.engine
+*.safetensors
+*.bin
+
+# Adaptadores LoRA
+lora_adapter/
+
+# Logs
+*.log
+
+# Bases de datos locales
+*.db
+*.sqlite
+*.sqlite3
+
+# Sistema operativo y editores
+.DS_Store
+.vscode/
+.idea/
+
+# Archivos temporales
+*.tmp
+*.bak
+EOF
+
