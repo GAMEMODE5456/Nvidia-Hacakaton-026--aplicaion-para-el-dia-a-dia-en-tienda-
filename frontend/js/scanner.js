@@ -1,100 +1,335 @@
 
-const API_URL = "http://127.0.0.1:8000";
+// =============================================
+// ESCANER DE TICKETS
+// Toma foto, ejecuta OCR y guarda en MariaDB
+// =============================================
 
-// ELEMENTOS DEL ESCÁNER
-const ticketImage = document.getElementById("ticketImage");
-const ticketPreview = document.getElementById("ticketPreview");
-const btnAnalyzeTicket = document.getElementById("btnAnalyzeTicket");
-const ticketResult = document.getElementById("ticketResult");
+const API_URL = window.location.origin;
+const URL_OCR = `${API_URL}/ocr/leer-ticket`;
+const MAX_MB = 12;
 
-// 1. MOSTRAR LA IMAGEN SELECCIONADA
-ticketImage.addEventListener("change", function () {
-    const imagen = this.files[0];
+const $ = (id) => document.getElementById(id);
 
-    if (!imagen) {
-        return;
+const ticketImage = $("ticketImage");
+const ticketPreview = $("ticketPreview");
+const btnAnalyzeTicket = $("btnAnalyzeTicket");
+const ticketResult = $("ticketResult");
+const ticketStatus = $("ticketStatus");
+const ticketTable = $("ticketTable");
+
+let ultimoJSON = null;
+
+function aviso(texto, tipo = "info") {
+    if (!ticketStatus) return;
+
+    ticketStatus.textContent = texto;
+    ticketStatus.dataset.tipo = tipo;
+
+    ticketStatus.setAttribute(
+        "role",
+        tipo === "error" ? "alert" : "status"
+    );
+}
+
+function idUsuarioActual() {
+    try {
+        const u = JSON.parse(
+            sessionStorage.getItem("usuario") || "null"
+        );
+
+        return (u && u.id_usuario) || 1;
+
+    } catch {
+        return 1;
     }
+}
+
+function dinero(n) {
+    return typeof n === "number"
+        ? n.toLocaleString("es-MX", {
+            style: "currency",
+            currency: "MXN"
+        })
+        : "—";
+}
+
+function esc(v) {
+    return String(v ?? "").replace(
+        /[&<>"']/g,
+        (c) => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;"
+        }[c])
+    );
+}
+
+// =============================================
+// MOSTRAR PRODUCTOS DEL TICKET
+// =============================================
+
+function pintarTabla(ticket) {
+
+    if (!ticketTable) return;
+
+    const filas = (ticket.productos || [])
+        .map((p) => `
+            <tr>
+                <td>${esc(p.nombre)}</td>
+                <td>${esc(p.presentacion ?? "—")}</td>
+                <td>${esc(p.cantidad)}</td>
+                <td>${dinero(p.precio_unitario)}</td>
+            </tr>
+        `)
+        .join("");
+
+    ticketTable.innerHTML = `
+        <p>
+            <strong>Proveedor:</strong>
+            ${esc(ticket.proveedor ?? "No detectado")}<br>
+
+            <strong>Folio:</strong>
+            ${esc(ticket.folio ?? "No detectado")}<br>
+
+            <strong>Fecha:</strong>
+            ${esc(ticket.fecha_compra ?? "No detectada")}<br>
+
+            <strong>Total:</strong>
+            ${dinero(ticket.total)}
+        </p>
+
+        <table>
+            <caption>Productos detectados</caption>
+
+            <thead>
+                <tr>
+                    <th>Producto</th>
+                    <th>Presentación</th>
+                    <th>Cantidad</th>
+                    <th>Precio unitario</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                ${filas || `
+                    <tr>
+                        <td colspan="4">Sin productos</td>
+                    </tr>
+                `}
+            </tbody>
+        </table>
+    `;
+}
+
+// =============================================
+// 1. VISTA PREVIA DE LA FOTOGRAFÍA
+// =============================================
+
+ticketImage.addEventListener("change", () => {
+
+    const imagen = ticketImage.files[0];
+
+    if (!imagen) return;
 
     if (!imagen.type.startsWith("image/")) {
-        alert("Selecciona una imagen válida.");
-        this.value = "";
+
+        aviso(
+            "Selecciona una imagen válida JPG o PNG.",
+            "error"
+        );
+
+        ticketImage.value = "";
         return;
     }
 
-    ticketPreview.src = URL.createObjectURL(imagen);
+    if (imagen.size > MAX_MB * 1024 * 1024) {
+
+        aviso(
+            `La imagen pesa más de ${MAX_MB} MB.`,
+            "error"
+        );
+
+        ticketImage.value = "";
+        return;
+    }
+
+    if (ticketPreview.dataset.previewUrl) {
+        URL.revokeObjectURL(ticketPreview.dataset.previewUrl);
+    }
+
+    const previewUrl = URL.createObjectURL(imagen);
+
+    ticketPreview.src = previewUrl;
+    ticketPreview.dataset.previewUrl = previewUrl;
+
     ticketPreview.classList.remove("hidden");
+    ticketPreview.alt = "Vista previa del ticket";
 
     ticketResult.textContent = "";
+
+    if (ticketTable) {
+        ticketTable.innerHTML = "";
+    }
+
+    ultimoJSON = null;
+
     btnAnalyzeTicket.disabled = false;
+
+    aviso(
+        "Imagen lista. Presiona Analizar ticket.",
+        "info"
+    );
 });
 
-// 2. ENVIAR EL TICKET AL MODELO DE IA
-btnAnalyzeTicket.addEventListener("click", async function () {
+// =============================================
+// 2. ENVIAR IMAGEN AL OCR Y GUARDAR
+// =============================================
+
+btnAnalyzeTicket.addEventListener("click", async () => {
 
     const imagen = ticketImage.files[0];
 
     if (!imagen) {
-        alert("Primero selecciona una fotografía del ticket.");
+
+        aviso(
+            "Primero toma o sube una foto del ticket.",
+            "error"
+        );
+
         return;
     }
 
-    // Obtener el usuario que inició sesión
-    const usuarioGuardado = sessionStorage.getItem("usuario");
-
-    let idUsuario = 1;
-
-    if (usuarioGuardado) {
-        const usuario = JSON.parse(usuarioGuardado);
-        idUsuario = usuario.id_usuario || 1;
-    }
-
-    // Preparar los datos para FastAPI
     const formData = new FormData();
+
     formData.append("imagen", imagen);
+
+    const controlador = new AbortController();
+
+    const limite = setTimeout(
+        () => controlador.abort(),
+        120000
+    );
 
     try {
 
         btnAnalyzeTicket.disabled = true;
-        btnAnalyzeTicket.textContent = "Analizando ticket...";
-        ticketResult.textContent = "La inteligencia artificial está leyendo tu ticket...";
 
-        const response = await fetch(
-            `${API_URL}/ia/leer-ticket?id_usuario=${idUsuario}`,
+        btnAnalyzeTicket.textContent = "Analizando y guardando...";
+
+        btnAnalyzeTicket.setAttribute(
+            "aria-busy",
+            "true"
+        );
+
+        aviso(
+            "Leyendo el ticket y guardando en MariaDB...",
+            "info"
+        );
+
+        const resp = await fetch(
+            `${URL_OCR}?id_usuario=${encodeURIComponent(idUsuarioActual())}`,
             {
                 method: "POST",
-                body: formData
+                body: formData,
+                signal: controlador.signal
             }
         );
 
-        const resultado = await response.json();
+        let datos = null;
 
-        if (!response.ok) {
+        try {
+            datos = await resp.json();
+        } catch {
             throw new Error(
-                resultado.detail
-                    ? JSON.stringify(resultado.detail)
-                    : "Error al analizar el ticket"
+                "El servidor no devolvió una respuesta JSON válida."
             );
         }
 
-        console.log("Resultado de la IA:", resultado);
+        if (!resp.ok) {
 
-        // Mostrar la respuesta de la IA
-        ticketResult.textContent =
-            typeof resultado === "string"
-                ? resultado
-                : JSON.stringify(resultado, null, 2);
+            const detalle = datos?.detail;
 
-    } catch (error) {
+            throw new Error(
+                typeof detalle === "string"
+                    ? detalle
+                    : `Error ${resp.status} al procesar el ticket.`
+            );
+        }
 
-        console.error("Error al analizar ticket:", error);
+        if (!datos.guardado || !datos.id_ticket) {
+            throw new Error(
+                "El OCR terminó, pero no se confirmó el guardado."
+            );
+        }
 
-        ticketResult.textContent = "No se pudo analizar el ticket: " + error.message;
+        // Guardar resultado completo
+        ultimoJSON = {
+            id_usuario: datos.id_usuario,
+            id_ticket: datos.id_ticket,
+            id_proveedor: datos.id_proveedor,
+            guardado: datos.guardado,
+            mensaje: datos.mensaje,
+            ticket: datos.ticket
+        };
+
+        console.log(
+            "Ticket procesado y guardado:",
+            datos
+        );
+
+        // Mostrar información
+        pintarTabla(datos.ticket);
+
+        ticketResult.textContent = JSON.stringify(
+            ultimoJSON,
+            null,
+            2
+        );
+
+        aviso(
+            `¡Ticket guardado correctamente! ID: ${datos.id_ticket}`,
+            "ok"
+        );
+
+        if (
+            datos.advertencias &&
+            datos.advertencias.length
+        ) {
+            aviso(
+                `Ticket guardado. Advertencias: ${datos.advertencias.join(" ")}`,
+                "info"
+            );
+        }
+
+    } catch (e) {
+
+        console.error("Error al procesar ticket:", e);
+
+        const msg =
+            e.name === "AbortError"
+                ? "El servidor tardó demasiado. Intenta nuevamente."
+                : e instanceof TypeError
+                    ? "No se pudo conectar con el servidor."
+                    : e.message;
+
+        aviso(msg, "error");
 
     } finally {
 
+        clearTimeout(limite);
+
         btnAnalyzeTicket.disabled = false;
+
         btnAnalyzeTicket.textContent = "Analizar ticket";
 
+        btnAnalyzeTicket.removeAttribute("aria-busy");
     }
-
 });
+
+// =============================================
+// 3. DISPONER DEL TICKET LEÍDO
+// =============================================
+
+window.obtenerTicketLeido = () => ultimoJSON;
