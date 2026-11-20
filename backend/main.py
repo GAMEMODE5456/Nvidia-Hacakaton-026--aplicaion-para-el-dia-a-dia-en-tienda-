@@ -16,6 +16,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from routes.login import router as login_router
+from routes.usuarios import router as usuarios_router
+from routes.tickets import router as tickets_router
+from routes.ia_api import router as ia_router
+
+app.include_router(login_router)
+app.include_router(usuarios_router)
+app.include_router(tickets_router)
+app.include_router(ia_router)
+
 # ---------- Frontend ----------
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR.parent / "frontend"

@@ -1,15 +1,19 @@
-from database.conexion import conectar
 
-from decimal import Decimal
-import pymysql  
+from database.conexion import conectar
+from decimal import Decimal, InvalidOperation
+
 
 def crear_ticket(datos, id_usuario):
 
     conexion = conectar()
+
     if conexion is None:
-        raise ConnectionError("No se pudo conectar con MariaDB")
+        raise ConnectionError(
+            "No se pudo conectar con MariaDB"
+        )
 
     try:
+        conexion.begin()
 
         with conexion.cursor() as cursor:
 
@@ -27,20 +31,26 @@ def crear_ticket(datos, id_usuario):
             usuario = cursor.fetchone()
 
             if not usuario:
-                raise ValueError("El usuario no existe o está inactivo")
+                raise ValueError(
+                    "El usuario no existe o está inactivo"
+                )
 
             # =====================================
-            # 2. OBTENER O CREAR PROVEEDOR
+            # 2. VALIDAR PROVEEDOR
             # =====================================
 
-            nombre_proveedor = datos["proveedor"].strip()
+            nombre_proveedor = (
+                datos.get("proveedor") or ""
+            ).strip()
 
             if not nombre_proveedor:
-                raise ValueError("El proveedor es obligatorio") #aqui si el tickets no tiene proveedor, se ejecta. es opcional
+                raise ValueError(
+                    "El proveedor es obligatorio"
+                )
+
             cursor.execute("""
                 INSERT INTO proveedores (nombre)
                 VALUES (%s)
-
                 ON DUPLICATE KEY UPDATE
                 id_proveedor = LAST_INSERT_ID(id_proveedor)
             """, (nombre_proveedor,))
@@ -56,36 +66,78 @@ def crear_ticket(datos, id_usuario):
             proveedor = cursor.fetchone()
 
             if not proveedor or not proveedor["activo"]:
-                raise ValueError("El proveedor está inactivo")
+                raise ValueError(
+                    "El proveedor está inactivo"
+                )
 
             # =====================================
             # 3. VALIDAR PRODUCTOS
             # =====================================
 
-            productos = datos["productos"]
+            productos = datos.get("productos") or []
 
             if not productos:
-                raise ValueError("El ticket no contiene productos")
+                raise ValueError(
+                    "El ticket no contiene productos"
+                )
 
             total_calculado = Decimal("0.00")
 
             for producto in productos:
 
-                cantidad = Decimal(str(producto["cantidad"]))
-                precio = Decimal(str(producto["precio_unitario"]))
+                try:
+                    cantidad = Decimal(
+                        str(producto["cantidad"])
+                    )
+
+                    precio = Decimal(
+                        str(producto["precio_unitario"])
+                    )
+
+                except (KeyError, InvalidOperation):
+                    raise ValueError(
+                        "Producto con cantidad o precio inválido"
+                    )
+
+                if not cantidad.is_finite() or not precio.is_finite():
+                    raise ValueError(
+                        "Cantidad o precio no válido"
+                    )
 
                 if cantidad <= 0 or precio < 0:
-                    raise ValueError("Cantidad o precio inválido")
+                    raise ValueError(
+                        "Cantidad o precio inválido"
+                    )
 
                 total_calculado += cantidad * precio
 
-            total_ticket = Decimal(str(datos["total"]))
-
-            if total_ticket < 0:
-                raise ValueError("El total no puede ser negativo")
+            total_calculado = total_calculado.quantize(
+                Decimal("0.01")
+            )
 
             # =====================================
-            # 4. INSERTAR TICKET
+            # 4. OBTENER TOTAL DEL TICKET
+            # =====================================
+
+            if datos.get("total") is None:
+                total_ticket = total_calculado
+            else:
+                try:
+                    total_ticket = Decimal(
+                        str(datos["total"])
+                    )
+                except InvalidOperation:
+                    raise ValueError(
+                        "El total del ticket es inválido"
+                    )
+
+            if not total_ticket.is_finite() or total_ticket < 0:
+                raise ValueError(
+                    "El total no puede ser negativo o inválido"
+                )
+
+            # =====================================
+            # 5. INSERTAR TICKET
             # =====================================
 
             cursor.execute("""
@@ -99,7 +151,9 @@ def crear_ticket(datos, id_usuario):
                     ruta_imagen,
                     estado
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 'PENDIENTE')
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, 'PENDIENTE'
+                )
             """, (
                 id_usuario,
                 id_proveedor,
@@ -113,29 +167,45 @@ def crear_ticket(datos, id_usuario):
             id_ticket = cursor.lastrowid
 
             # =====================================
-            # 5. INSERTAR PRODUCTOS Y DETALLES
+            # 6. INSERTAR PRODUCTOS
             # =====================================
+
+            productos_guardados = []
 
             for producto in productos:
 
-                nombre = producto["nombre"].strip()
-                presentacion = producto["presentacion"].strip()
+                nombre = (
+                    producto.get("nombre") or ""
+                ).strip()
 
-                if not nombre or not presentacion:
+                presentacion = (
+                    producto.get("presentacion")
+                    or "Sin presentación"
+                ).strip()
+
+                if not nombre:
                     raise ValueError(
-                        "El nombre y la presentación son obligatorios"
+                        "El producto no tiene nombre"
                     )
 
-                categoria = producto.get("categoria") or "Sin categoría"
+                categoria = (
+                    producto.get("categoria")
+                    or "Sin categoría"
+                )
+
+                codigo_barras = (
+                    producto.get("codigo_barras") or None
+                )
+
+                unidad = producto.get("unidad") or "pieza"
 
                 # ---------------------------------
-                # 5.1 Obtener o crear categoría
+                # 6.1 BUSCAR O CREAR CATEGORÍA
                 # ---------------------------------
 
                 cursor.execute("""
                     INSERT INTO categorias (nombre)
                     VALUES (%s)
-
                     ON DUPLICATE KEY UPDATE
                     id_categoria = LAST_INSERT_ID(id_categoria)
                 """, (categoria,))
@@ -151,18 +221,23 @@ def crear_ticket(datos, id_usuario):
                 categoria_db = cursor.fetchone()
 
                 if not categoria_db or not categoria_db["activo"]:
-                    raise ValueError("La categoría está inactiva")
-
-                codigo_barras = producto.get("codigo_barras") or None
+                    raise ValueError(
+                        "La categoría está inactiva"
+                    )
 
                 # ---------------------------------
-                # 5.2 Buscar producto existente
+                # 6.2 BUSCAR PRODUCTO POR CÓDIGO
                 # ---------------------------------
+
+                id_producto = None
 
                 if codigo_barras:
 
                     cursor.execute("""
-                        SELECT id_producto, id_proveedor, activo
+                        SELECT
+                            id_producto,
+                            id_proveedor,
+                            activo
                         FROM productos
                         WHERE codigo_barras = %s
                         FOR UPDATE
@@ -178,15 +253,15 @@ def crear_ticket(datos, id_usuario):
                             )
 
                         if not producto_db["activo"]:
-                            raise ValueError("El producto está inactivo")
+                            raise ValueError(
+                                "El producto está inactivo"
+                            )
 
                         id_producto = producto_db["id_producto"]
 
-                    else:
-                        id_producto = None
-
-                else:
-                    id_producto = None
+                # ---------------------------------
+                # 6.3 BUSCAR POR NOMBRE Y PRESENTACIÓN
+                # ---------------------------------
 
                 if id_producto is None:
 
@@ -208,12 +283,14 @@ def crear_ticket(datos, id_usuario):
                     if producto_db:
 
                         if not producto_db["activo"]:
-                            raise ValueError("El producto está inactivo")
+                            raise ValueError(
+                                "El producto está inactivo"
+                            )
 
                         id_producto = producto_db["id_producto"]
 
                 # ---------------------------------
-                # 5.3 Crear producto si no existe
+                # 6.4 CREAR PRODUCTO SI NO EXISTE
                 # ---------------------------------
 
                 if id_producto is None:
@@ -241,21 +318,28 @@ def crear_ticket(datos, id_usuario):
                         nombre,
                         presentacion,
                         codigo_barras,
-                        producto.get("unidad", "pieza"),
-                        producto.get("stock_minimo", 5),
+                        unidad,
+                        producto.get("stock_minimo") or 5,
                         producto.get("precio_venta")
                     ))
 
                     id_producto = cursor.lastrowid
 
                 # ---------------------------------
-                # 5.4 Insertar detalle del ticket
+                # 6.5 INSERTAR DETALLE DEL TICKET
                 # ---------------------------------
 
-                cantidad = Decimal(str(producto["cantidad"]))
-                precio = Decimal(str(producto["precio_unitario"]))
+                cantidad = Decimal(
+                    str(producto["cantidad"])
+                )
 
-                subtotal = cantidad * precio
+                precio = Decimal(
+                    str(producto["precio_unitario"])
+                )
+
+                subtotal = (cantidad * precio).quantize(
+                    Decimal("0.01")
+                )
 
                 cursor.execute("""
                     INSERT INTO detalle_ticket (
@@ -276,19 +360,31 @@ def crear_ticket(datos, id_usuario):
                     subtotal
                 ))
 
-            # =====================================
-            # 6. GUARDAR TRANSACCIÓN
-            # =====================================
+                productos_guardados.append({
+                    "id_producto": id_producto,
+                    "nombre": nombre,
+                    "cantidad": float(cantidad),
+                    "precio_unitario": float(precio),
+                    "subtotal": float(subtotal)
+                })
+
+        # =====================================
+        # 7. CONFIRMAR TRANSACCIÓN
+        # =====================================
 
         conexion.commit()
 
         return {
+            "success": True,
             "id_ticket": id_ticket,
+            "id_usuario": id_usuario,
             "id_proveedor": id_proveedor,
             "proveedor": nombre_proveedor,
+            "folio": datos.get("folio"),
             "subtotal": float(total_calculado),
             "total": float(total_ticket),
             "estado": "PENDIENTE",
+            "productos_guardados": productos_guardados,
             "mensaje": "Ticket registrado correctamente"
         }
 
@@ -296,10 +392,12 @@ def crear_ticket(datos, id_usuario):
 
         conexion.rollback()
 
-        print("Error al registrar ticket:", error)
+        print(
+            "ERROR AL REGISTRAR TICKET:",
+            str(error)
+        )
 
         raise
 
     finally:
-
         conexion.close()
