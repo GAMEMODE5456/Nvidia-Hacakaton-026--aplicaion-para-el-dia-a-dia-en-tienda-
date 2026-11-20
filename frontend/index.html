@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TicketIA</title>
+<style>
+:root{--dark:#0f3d2e;--green:#1faa59;--green-d:#168a47;--bg:#f2f5f3;--ink:#16211b;--mut:#51605a;--line:#c9d3cd;--err:#b3261e;--ok:#146c3a;--r:14px}
+*{box-sizing:border-box}
+html{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+body{margin:0;min-height:100vh;font-size:1rem;line-height:1.45;padding-bottom:76px}
+body.auth{padding-bottom:0}
+h1,h2,h3{margin:0 0 .5rem;line-height:1.2}
+h2:focus,h1:focus{outline:none}
+[hidden]{display:none!important}
+.skip{position:absolute;left:-999px;top:0;background:#fff;padding:.6rem 1rem;z-index:99}
+.skip:focus{left:8px;top:8px}
+.hero{background:var(--dark);color:#fff;text-align:center;padding:2.2rem 1rem 3rem}
+.hero h1{font-size:2.1rem;margin:.3rem 0 0}
+.hero p{margin:0;color:#d4e6dc}
+.sheet{background:#fff;max-width:480px;margin:-1.6rem auto 0;border-radius:24px 24px 0 0;padding:1.5rem 1.25rem 2rem;box-shadow:0 -2px 12px rgba(0,0,0,.06)}
+.wrap{max-width:560px;margin:0 auto;padding:1.25rem 1rem}
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:1rem;margin-bottom:.9rem}
+label{display:block;font-weight:600;margin:.9rem 0 .3rem}
+input{width:100%;font:inherit;padding:.75rem .8rem;border:2px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+input:focus-visible,button:focus-visible,a:focus-visible,.btn:focus-visible{outline:3px solid #0b57d0;outline-offset:2px}
+input[aria-invalid=true]{border-color:var(--err)}
+.field-err{color:var(--err);font-size:.9rem;margin:.25rem 0 0;min-height:0}
+.hint{color:var(--mut);font-size:.9rem;margin:.25rem 0 0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;width:100%;font:inherit;font-weight:700;padding:.85rem 1rem;margin-top:1rem;border:2px solid var(--green-d);border-radius:12px;background:var(--green);color:#fff;cursor:pointer;text-decoration:none;transition:transform .08s,background .15s}
+.btn:hover{background:var(--green-d)}
+.btn:active{transform:scale(.97);background:#0f6e38}
+.btn.sec{background:#fff;color:var(--dark);border-color:var(--dark)}
+.btn.sec:hover{background:#e6efe9}
+.btn.link{background:none;border:none;color:var(--dark);text-decoration:underline;width:auto;margin-top:.5rem;padding:.4rem}
+.btn[disabled],.btn[aria-busy=true]{opacity:.6;cursor:not-allowed}
+.spin{width:1.1em;height:1.1em;border:3px solid rgba(255,255,255,.5);border-top-color:#fff;border-radius:50%;animation:s .8s linear infinite}
+.sec .spin{border-color:rgba(15,61,46,.3);border-top-color:var(--dark)}
+@keyframes s{to{transform:rotate(360deg)}}
+.row{display:flex;gap:.6rem}.row>*{flex:1}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-bottom:.9rem}
+.stats strong{display:block;font-size:1.6rem}
+.t{display:flex;justify-content:space-between;gap:1rem;padding:.7rem 0;border-bottom:1px solid var(--line)}
+.t:last-child{border:0}
+.t small{color:var(--mut)}
+.prod{display:grid;grid-template-columns:1fr 6.5rem 2.75rem;gap:.4rem;margin-bottom:.5rem;align-items:center}
+.prod button{height:2.75rem;border:2px solid var(--line);border-radius:10px;background:#fff;font-size:1.1rem;cursor:pointer}
+.prod button:active{transform:scale(.94)}
+.preview{width:100%;max-height:340px;object-fit:contain;border-radius:var(--r);border:1px solid var(--line);margin-top:1rem;background:#fff}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;justify-content:center;z-index:5}
+nav button{flex:1;max-width:140px;background:none;border:0;padding:.7rem .3rem;font:inherit;font-size:.85rem;color:var(--mut);cursor:pointer}
+nav button[aria-current=page]{color:var(--dark);font-weight:700;box-shadow:inset 0 3px 0 var(--green)}
+nav button:active{background:#e6efe9}
+#toasts{position:fixed;top:10px;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:.5rem;z-index:50;padding:0 .75rem;pointer-events:none}
+.toast{pointer-events:auto;max-width:480px;width:100%;padding:.8rem 1rem;border-radius:12px;color:#fff;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.25);display:flex;gap:.7rem;align-items:flex-start;animation:in .2s ease-out}
+.toast.ok{background:var(--ok)}.toast.error{background:var(--err)}.toast.info{background:#1d3b73}
+.toast button{margin-left:auto;background:none;border:0;color:#fff;font-size:1.2rem;cursor:pointer;line-height:1}
+@keyframes in{from{opacity:0;transform:translateY(-8px)}}
+.banner{background:#fff3cd;color:#5c4400;padding:.5rem 1rem;text-align:center;font-size:.9rem}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body class="auth">
+<a class="skip" href="#main">Saltar al contenido</a>
+<div id="toasts" aria-live="polite" aria-atomic="false"></div>
+<div id="offline" class="banner" role="status" hidden>Sin conexión a internet. Algunas acciones no funcionarán.</div>
+
+<main id="main">
+
+<!-- LOGIN -->
+<section id="login" class="view" aria-labelledby="t-login">
+  <div class="hero"><h1>TicketIA</h1><p>Escanea, analiza y guarda tus tickets</p></div>
+  <div class="sheet">
+    <h2 id="t-login" tabindex="-1">Iniciar sesión</h2>
+    <form id="loginForm" novalidate>
+      <label for="loginEmail">Correo electrónico</label>
+      <input id="loginEmail" type="email" autocomplete="email" inputmode="email" aria-describedby="e-loginEmail">
+      <p class="field-err" id="e-loginEmail" role="alert"></p>
+      <label for="loginPassword">Contraseña</label>
+      <input id="loginPassword" type="password" autocomplete="current-password" aria-describedby="e-loginPassword">
+      <p class="field-err" id="e-loginPassword" role="alert"></p>
+      <button class="btn" type="submit">Ingresar</button>
+    </form>
+    <p style="text-align:center;margin-top:1rem">¿No tienes cuenta? <button class="btn link" data-go="register" type="button">Crear cuenta</button></p>
+  </div>
+</section>
+
+<!-- REGISTRO -->
+<section id="register" class="view" aria-labelledby="t-reg" hidden>
+  <div class="hero"><h1>TicketIA</h1><p>Crea tu cuenta</p></div>
+  <div class="sheet">
+    <h2 id="t-reg" tabindex="-1">Crear cuenta</h2>
+    <form id="registerForm" novalidate>
+      <label for="regNombre">Nombre</label>
+      <input id="regNombre" autocomplete="given-name" aria-describedby="e-regNombre">
+      <p class="field-err" id="e-regNombre" role="alert"></p>
+      <label for="regApellido">Apellido</label>
+      <input id="regApellido" autocomplete="family-name" aria-describedby="e-regApellido">
+      <p class="field-err" id="e-regApellido" role="alert"></p>
+      <label for="regEmail">Correo electrónico</label>
+      <input id="regEmail" type="email" autocomplete="email" inputmode="email" aria-describedby="e-regEmail">
+      <p class="field-err" id="e-regEmail" role="alert"></p>
+      <label for="regTel">Teléfono</label>
+      <input id="regTel" type="tel" autocomplete="tel" inputmode="tel" aria-describedby="e-regTel">
+      <p class="field-err" id="e-regTel" role="alert"></p>
+      <label for="regPass">Contraseña</label>
+      <input id="regPass" type="password" autocomplete="new-password" aria-describedby="h-regPass e-regPass">
+      <p class="hint" id="h-regPass">Mínimo 6 caracteres.</p>
+      <p class="field-err" id="e-regPass" role="alert"></p>
+      <button class="btn" type="submit">Crear cuenta</button>
+    </form>
+    <p style="text-align:center;margin-top:1rem">¿Ya tienes cuenta? <button class="btn link" data-go="login" type="button">Iniciar sesión</button></p>
+  </div>
+</section>
+
+<!-- APP -->
+<div id="app" hidden>
+
+  <section id="home" class="view wrap" aria-labelledby="t-home">
+    <h2 id="t-home" tabindex="-1">Hola, <span id="userName">usuario</span></h2>
+    <div class="stats">
+      <div class="card"><strong id="statCount">0</strong>Tickets guardados</div>
+      <div class="card"><strong id="statTotal">$0.00</strong>Total de compras</div>
+    </div>
+    <button class="btn" data-go="scanner" type="button">Escanear un ticket</button>
+    <h3 style="margin-top:1.5rem">Actividad reciente</h3>
+    <div class="card" id="recent"></div>
+  </section>
+
+  <section id="scanner" class="view wrap" aria-labelledby="t-scan" hidden>
+    <h2 id="t-scan" tabindex="-1">Escanear ticket</h2>
+    <p>Toma una foto o sube una imagen de tu ticket. La IA leerá los datos y tú podrás revisarlos antes de guardar.</p>
+    <div class="row">
+      <button class="btn sec" id="btnCamera" type="button">Tomar foto</button>
+      <button class="btn sec" id="btnGallery" type="button">Subir imagen</button>
+    </div>
+    <input id="camInput" type="file" accept="image/*" capture="environment" hidden>
+    <input id="fileInput" type="file" accept="image/*" hidden>
+    <img id="preview" class="preview" alt="Vista previa del ticket seleccionado" hidden>
+    <p id="fileName" class="hint" role="status"></p>
+    <button class="btn" id="btnAnalyze" type="button" disabled>Analizar ticket</button>
+  </section>
+
+  <section id="review" class="view wrap" aria-labelledby="t-rev" hidden>
+    <h2 id="t-rev" tabindex="-1">Revisar información</h2>
+    <p class="hint">Corrige lo que la IA haya leído mal y guarda.</p>
+    <form id="reviewForm" novalidate>
+      <label for="rProv">Proveedor</label><input id="rProv" aria-describedby="e-rProv">
+      <p class="field-err" id="e-rProv" role="alert"></p>
+      <label for="rFolio">Folio</label><input id="rFolio">
+      <label for="rFecha">Fecha de compra</label><input id="rFecha" type="date">
+      <h3 style="margin-top:1.2rem">Productos</h3>
+      <div id="prods"></div>
+      <button class="btn sec" id="btnAddProd" type="button">Agregar producto</button>
+      <label for="rTotal">Total</label><input id="rTotal" type="number" step="0.01" min="0" inputmode="decimal" aria-describedby="e-rTotal">
+      <p class="field-err" id="e-rTotal" role="alert"></p>
+      <button class="btn" type="submit">Guardar ticket</button>
+      <button class="btn link" id="btnCancelReview" type="button">Cancelar</button>
+    </form>
+  </section>
+
+  <section id="history" class="view wrap" aria-labelledby="t-hist" hidden>
+    <h2 id="t-hist" tabindex="-1">Historial de tickets</h2>
+    <div class="card" id="histList"></div>
+  </section>
+
+  <section id="profile" class="view wrap" aria-labelledby="t-prof" hidden>
+    <h2 id="t-prof" tabindex="-1">Mi perfil</h2>
+    <div class="card">
+      <p><strong id="pName"></strong></p>
+      <p id="pEmail" class="hint"></p>
+      <p id="pTel" class="hint"></p>
+    </div>
+    <button class="btn sec" id="btnLogout" type="button">Cerrar sesión</button>
+  </section>
+
+  <nav aria-label="Navegación principal">
+    <button data-go="home" type="button">Inicio</button>
+    <button data-go="scanner" type="button">Escanear</button>
+    <button data-go="history" type="button">Historial</button>
+    <button data-go="profile" type="button">Perfil</button>
+  </nav>
+</div>
+</main>
+
+<script>
+/* ============ CONFIGURACIÓN: ajusta esto a tu API ============ */
+// Usa el mismo host desde el que abres la página, así funciona en tu celular
+// (abre la página como http://IP-DE-TU-PC:5500, no como localhost).
+const API_URL = window.location.origin;
+
+const ENDPOINTS = {
+    login: "/login/",
+    register: "/usuarios/registro",
+    scan: "/ia/leer-ticket",
+    save: "/tickets/"
+};
+/* ============================================================== */
+
+const $ = (id) => document.getElementById(id);
+let user = null, pickedFile = null, previewURL = null;
+
+/* ---------- Avisos (toasts) ---------- */
+function toast(msg, type = "info", ms = 6000) {
+  const t = document.createElement("div");
+  t.className = "toast " + type;
+  t.setAttribute("role", type === "error" ? "alert" : "status");
+  const s = document.createElement("span"); s.textContent = msg;
+  const b = document.createElement("button"); b.type = "button"; b.textContent = "×"; b.setAttribute("aria-label", "Cerrar aviso");
+  b.onclick = () => t.remove();
+  t.append(s, b); $("toasts").append(t);
+  if (ms) setTimeout(() => t.remove(), ms);
+}
+
+/* ---------- Botones con estado de carga ---------- */
+function busy(btn, on, label) {
+  if (on) {
+    btn.dataset.label = btn.textContent;
+    btn.setAttribute("aria-busy", "true"); btn.disabled = true;
+    btn.innerHTML = '<span class="spin" aria-hidden="true"></span><span></span>';
+    btn.lastChild.textContent = label;
+  } else {
+    btn.removeAttribute("aria-busy"); btn.disabled = false;
+    btn.textContent = btn.dataset.label || btn.textContent;
+  }
+}
+
+/* ---------- Errores por campo ---------- */
+function fieldErr(id, msg) {
+  const inp = $(id), e = $("e-" + id);
+  e.textContent = msg || "";
+  if (msg) inp.setAttribute("aria-invalid", "true"); else inp.removeAttribute("aria-invalid");
+}
+function clearErrs(form) { form.querySelectorAll("input").forEach(i => fieldErr(i.id, "")); }
+function firstInvalid(form) { const i = form.querySelector("[aria-invalid=true]"); if (i) i.focus(); return !!i; }
+
+/* ---------- Llamadas a la API ---------- */
+async function api(path, opts = {}, timeout = 30000) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeout);
+  try {
+    const res = await fetch(API_URL + path, { ...opts, signal: ctl.signal });
+    let data = null;
+    try { data = await res.json(); } catch { /* sin JSON */ }
+    return { ok: res.ok && !(data && data.success === false), status: res.status, data };
+  } catch (e) {
+    const msg = e.name === "AbortError"
+      ? "El servidor tardó demasiado en responder. Intenta de nuevo."
+      : "No se pudo conectar con el servidor (" + API_URL + "). Revisa que la API esté encendida, que estés en la misma red y que tenga CORS habilitado.";
+    return { ok: false, status: 0, data: null, netError: msg };
+  } finally { clearTimeout(timer); }
+}
+function errText(r, fallback) {
+  if (r.netError) return r.netError;
+  const d = r.data || {};
+  if (typeof d.mensaje === "string") return d.mensaje;
+  if (typeof d.message === "string") return d.message;
+  if (typeof d.detail === "string") return d.detail;
+  if (Array.isArray(d.detail)) return d.detail.map(x => x.msg || JSON.stringify(x)).join(". ");
+  return fallback + (r.status ? " (error " + r.status + ")" : "");
+}
+const jsonOpts = (body) => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+/* ---------- Navegación ---------- */
+const appViews = ["home", "scanner", "review", "history", "profile"];
+function show(name) {
+  document.querySelectorAll(".view").forEach(v => v.hidden = v.id !== name);
+  const inApp = appViews.includes(name);
+  $("app").hidden = !inApp;
+  if (inApp) $(name).hidden = false;
+  document.body.classList.toggle("auth", !inApp);
+  document.querySelectorAll("nav button").forEach(b => {
+    if (b.dataset.go === name || (name === "review" && b.dataset.go === "scanner")) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
+  if (name === "home") renderHome();
+  if (name === "history") renderHistory();
+  if (name === "profile") renderProfile();
+  window.scrollTo(0, 0);
+  const h = $(name).querySelector("h2"); if (h) h.focus();
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-go]");
+  if (b) { if (!user && appViews.includes(b.dataset.go)) return show("login"); show(b.dataset.go); }
+});
+
+/* ---------- Tickets guardados (copia local para Inicio e Historial) ---------- */
+const keyT = () => "tickets_" + (user && (user.id_usuario || user.correo));
+const getTickets = () => { try { return JSON.parse(localStorage.getItem(keyT())) || []; } catch { return []; } };
+const money = (n) => "$" + (Number(n) || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function listHTML(el, items) {
+  el.textContent = "";
+  if (!items.length) { const p = document.createElement("p"); p.textContent = "Aún no hay tickets. Escanea el primero."; p.className = "hint"; el.append(p); return; }
+  items.forEach(t => {
+    const row = document.createElement("div"); row.className = "t";
+    const l = document.createElement("div");
+    const s = document.createElement("strong"); s.textContent = t.proveedor || "Sin proveedor";
+    const sm = document.createElement("small"); sm.textContent = "Folio " + (t.folio || "—") + " · " + (t.fecha || "sin fecha");
+    l.append(s, document.createElement("br"), sm);
+    const r = document.createElement("strong"); r.textContent = money(t.total);
+    row.append(l, r); el.append(row);
+  });
+}
+function renderHome() {
+  const t = getTickets();
+  $("userName").textContent = user ? user.nombre || "usuario" : "usuario";
+  $("statCount").textContent = t.length;
+  $("statTotal").textContent = money(t.reduce((a, x) => a + (Number(x.total) || 0), 0));
+  listHTML($("recent"), t.slice(0, 3));
+}
+const renderHistory = () => listHTML($("histList"), getTickets());
+function renderProfile() {
+  $("pName").textContent = [user.nombre, user.apellido].filter(Boolean).join(" ") || "Mi cuenta";
+  $("pEmail").textContent = user.correo || "";
+  $("pTel").textContent = user.telefono || "";
+}
+
+/* ---------- Login ---------- */
+const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+$("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, btn = f.querySelector("button[type=submit]");
+  clearErrs(f);
+  const correo = $("loginEmail").value.trim(), password = $("loginPassword").value;
+  if (!correo) fieldErr("loginEmail", "Escribe tu correo electrónico.");
+  else if (!emailOk(correo)) fieldErr("loginEmail", "El correo no tiene un formato válido.");
+  if (!password) fieldErr("loginPassword", "Escribe tu contraseña.");
+  if (firstInvalid(f)) return toast("Revisa los campos marcados.", "error");
+
+  busy(btn, true, "Ingresando…");
+  const r = await api(ENDPOINTS.login, jsonOpts({ correo, password }));
+  busy(btn, false);
+  if (!r.ok) return toast(errText(r, "Correo o contraseña incorrectos."), "error");
+
+  user = (r.data && (r.data.usuario || r.data.user)) || { correo };
+  sessionStorage.setItem("usuario", JSON.stringify(user));
+  f.reset();
+  toast("¡Bienvenido a TicketIA!", "ok", 3500);
+  show("home");
+});
+
+/* ---------- Registro ---------- */
+$("registerForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, btn = f.querySelector("button[type=submit]");
+  clearErrs(f);
+  const d = { nombre: $("regNombre").value.trim(), apellido: $("regApellido").value.trim(), correo: $("regEmail").value.trim(), telefono: $("regTel").value.trim(), password: $("regPass").value };
+  if (!d.nombre) fieldErr("regNombre", "Escribe tu nombre.");
+  if (!d.apellido) fieldErr("regApellido", "Escribe tu apellido.");
+  if (!d.correo) fieldErr("regEmail", "Escribe tu correo electrónico.");
+  else if (!emailOk(d.correo)) fieldErr("regEmail", "El correo no tiene un formato válido.");
+  if (d.telefono.replace(/\D/g, "").length < 10) fieldErr("regTel", "Escribe un teléfono de al menos 10 dígitos.");
+  if (d.password.length < 6) fieldErr("regPass", "La contraseña debe tener al menos 6 caracteres.");
+  if (firstInvalid(f)) return toast("Revisa los campos marcados.", "error");
+
+  busy(btn, true, "Creando cuenta…");
+  const r = await api(ENDPOINTS.register, jsonOpts(d));
+  busy(btn, false);
+  if (!r.ok) {
+    const msg = errText(r, "No se pudo crear la cuenta.");
+    if (r.status === 409 || /existe|registrad|duplic|already/i.test(msg)) {
+      fieldErr("regEmail", "Este correo ya está registrado. Inicia sesión.");
+      $("regEmail").focus();
+      return toast("Esa cuenta ya existe. Inicia sesión o usa otro correo.", "error");
+    }
+    return toast(msg, "error");
+  }
+  toast("Cuenta creada correctamente. Ya puedes iniciar sesión.", "ok");
+  $("loginEmail").value = d.correo;
+  f.reset();
+  show("login");
+  $("loginPassword").focus();
+});
+
+/* ---------- Escáner ---------- */
+$("btnCamera").onclick = () => $("camInput").click();
+$("btnGallery").onclick = () => $("fileInput").click();
+function pick(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/")) return toast("El archivo debe ser una imagen (JPG, PNG o similar).", "error");
+  if (file.size > 12 * 1024 * 1024) return toast("La imagen pesa más de 12 MB. Toma una foto con menor resolución.", "error");
+  pickedFile = file;
+  if (previewURL) URL.revokeObjectURL(previewURL);
+  previewURL = URL.createObjectURL(file);
+  $("preview").src = previewURL; $("preview").hidden = false;
+  $("fileName").textContent = "Imagen lista: " + file.name;
+  $("btnAnalyze").disabled = false;
+  $("btnAnalyze").focus();
+}
+$("camInput").onchange = (e) => { pick(e.target.files[0]); e.target.value = ""; };
+$("fileInput").onchange = (e) => { pick(e.target.files[0]); e.target.value = ""; };
+
+function normalize(raw) {
+  let r = raw;
+  if (typeof r === "string") {
+    try { r = JSON.parse(r.replace(/```json|```/g, "").trim()); } catch { r = {}; }
+  }
+  for (const k of ["datos", "ticket", "resultado", "data", "respuesta"]) {
+    if (r && typeof r[k] === "object" && r[k]) { r = r[k]; break; }
+    if (r && typeof r[k] === "string") { try { r = JSON.parse(r[k].replace(/```json|```/g, "").trim()); break; } catch {} }
+  }
+  r = r || {};
+  const arr = r.productos || r.items || r.articulos || [];
+  return {
+    proveedor: r.proveedor || r.tienda || r.establecimiento || r.comercio || "",
+    folio: r.folio || r.numero_ticket || r.ticket || "",
+    fecha: String(r.fecha || r.fecha_compra || "").slice(0, 10),
+    total: r.total ?? r.monto_total ?? "",
+    productos: (Array.isArray(arr) ? arr : []).map(p => ({
+      nombre: p.nombre || p.descripcion || p.producto || "",
+      precio: p.precio ?? p.importe ?? p.total ?? p.precio_total ?? ""
+    }))
+  };
+}
+
+$("btnAnalyze").addEventListener("click", async () => {
+  if (!pickedFile) return toast("Primero toma o sube una foto del ticket.", "error");
+  const btn = $("btnAnalyze"), fd = new FormData();
+  fd.append("imagen", pickedFile, pickedFile.name || "ticket.jpg");
+  busy(btn, true, "Analizando ticket…");
+  toast("La IA está leyendo tu ticket. Puede tardar unos segundos.", "info", 4000);
+  const id = user && (user.id_usuario || 1);
+  const r = await api(ENDPOINTS.scan + "?id_usuario=" + encodeURIComponent(id), { method: "POST", body: fd }, 90000);
+  busy(btn, false);
+  btn.disabled = false;
+  if (!r.ok) return toast(errText(r, "No se pudo analizar el ticket."), "error");
+  const t = normalize(r.data);
+  if (!t.proveedor && !t.total && !t.productos.length) toast("La IA no encontró datos claros. Completa la información a mano.", "info");
+  else toast("Ticket leído. Revisa los datos antes de guardar.", "ok", 4000);
+  fillReview(t);
+  show("review");
+});
+
+/* ---------- Revisión y guardado ---------- */
+function prodRow(p = {}) {
+  const row = document.createElement("div"); row.className = "prod";
+  const n = document.createElement("input"); n.placeholder = "Producto"; n.value = p.nombre || ""; n.setAttribute("aria-label", "Nombre del producto");
+  const pr = document.createElement("input"); pr.type = "number"; pr.step = "0.01"; pr.min = "0"; pr.inputMode = "decimal"; pr.placeholder = "Precio"; pr.value = p.precio ?? ""; pr.setAttribute("aria-label", "Precio del producto");
+  const x = document.createElement("button"); x.type = "button"; x.textContent = "✕"; x.setAttribute("aria-label", "Quitar producto");
+  x.onclick = () => { row.remove(); toast("Producto quitado.", "info", 2000); };
+  row.append(n, pr, x); return row;
+}
+function fillReview(t) {
+  clearErrs($("reviewForm"));
+  $("rProv").value = t.proveedor; $("rFolio").value = t.folio; $("rFecha").value = t.fecha; $("rTotal").value = t.total;
+  $("prods").textContent = "";
+  t.productos.forEach(p => $("prods").append(prodRow(p)));
+}
+$("btnAddProd").onclick = () => { const r = prodRow(); $("prods").append(r); r.querySelector("input").focus(); };
+$("btnCancelReview").onclick = () => show("scanner");
+
+$("reviewForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target, btn = f.querySelector("button[type=submit]");
+  clearErrs(f);
+  const productos = [...$("prods").children].map(r => { const i = r.querySelectorAll("input"); return { nombre: i[0].value.trim(), precio: parseFloat(i[1].value) || 0 }; }).filter(p => p.nombre);
+  const total = parseFloat($("rTotal").value);
+  if (!$("rProv").value.trim()) fieldErr("rProv", "Escribe el nombre del proveedor.");
+  if (isNaN(total) || total <= 0) fieldErr("rTotal", "Escribe un total mayor a cero.");
+  if (firstInvalid(f)) return toast("Revisa los campos marcados.", "error");
+
+  const ticket = { id_usuario: user.id_usuario || 1, proveedor: $("rProv").value.trim(), folio: $("rFolio").value.trim(), fecha: $("rFecha").value, total, productos };
+  busy(btn, true, "Guardando…");
+  const r = await api(ENDPOINTS.save, jsonOpts(ticket));
+  busy(btn, false);
+  if (!r.ok) return toast(errText(r, "No se pudo guardar el ticket.") + " Tus datos siguen aquí; intenta de nuevo.", "error", 8000);
+
+  const all = getTickets(); all.unshift(ticket); localStorage.setItem(keyT(), JSON.stringify(all));
+  toast("Ticket guardado correctamente.", "ok");
+  pickedFile = null; $("preview").hidden = true; $("fileName").textContent = ""; $("btnAnalyze").disabled = true;
+  show("home");
+});
+
+/* ---------- Sesión ---------- */
+$("btnLogout").onclick = () => { sessionStorage.removeItem("usuario"); user = null; toast("Sesión cerrada.", "info", 3000); show("login"); };
+window.addEventListener("online", () => $("offline").hidden = true);
+window.addEventListener("offline", () => $("offline").hidden = false);
+$("offline").hidden = navigator.onLine;
+
+try { user = JSON.parse(sessionStorage.getItem("usuario")); } catch { user = null; }
+show(user ? "home" : "login");
+</script>
+</body>
+</html>
