@@ -1,0 +1,34 @@
+{
+    "id_usuario": 1,
+    "ticket": {
+        "proveedor": "Coca-Cola",
+        "folio": "CC-2026-003",
+        "fecha_compra": "2026-11-19T15:30:00",
+        "total": 100.00,
+        "ruta_imagen": "tickets/coca_cola_003.jpg",
+        "productos": [
+            {
+                "nombre": "Coca-Cola",
+                "presentacion": "600 ml",
+                "codigo_barras": null,
+                "unidad": "pieza",
+                "cantidad": 4,
+                "precio_unitario": 15.00,
+                "precio_venta": 20.00,
+                "stock_minimo": 5,
+                "categoria": "Refrescos"
+            },
+            {
+                "nombre": "Coca-Cola",
+                "presentacion": "2 litros",
+                "codigo_barras": null,
+                "unidad": "pieza",
+                "cantidad": 2,
+                "precio_unitario": 20.00,
+                "precio_venta": 28.00,
+                "stock_minimo": 3,
+                "categoria": "Refrescos"
+            }
+        ]
+    }
+}

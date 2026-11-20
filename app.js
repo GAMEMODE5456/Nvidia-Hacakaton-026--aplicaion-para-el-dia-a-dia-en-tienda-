@@ -170,23 +170,30 @@ const api = {
   },
 
   // POST /ticket/parse (multipart "file") -> ParsedTicket
+  
   async leerTicket(blob) {
-    if (API_URL) {
-      const fd = new FormData();
-      fd.append("file", blob, "ticket.jpg");
-      return http("/ticket/parse", { method: "POST", body: fd });
+  if (!API_URL) {
+    throw new Error("No está configurada la URL del backend");
+  }
+
+  const fd = new FormData();
+
+  // El nombre debe coincidir con UploadFile: imagen
+  fd.append("imagen", blob, "ticket.jpg");
+
+  // Enviar fotografía directamente a YOLO + EasyOCR
+  const respuesta = await http(
+    "/ia/leer-ticket?id_usuario=1",
+    {
+      method: "POST",
+      body: fd
     }
-    await new Promise(r => setTimeout(r, 900));
-    return {
-      items: [
-        { nombre: "Refresco 600 ml", cantidad: 12, precio: 15, confianza: 0.95, crudo: "REFR 600ML 12" },
-        { nombre: "Arros 1kg", cantidad: 5, precio: 28, confianza: 0.5, crudo: "ARROS 1K 5" },
-      ],
-      total: 320,
-      fecha: null,
-      advertencias: ["Modo demostración: estos datos son de ejemplo."],
-    };
-  },
+  );
+
+  // Devolver el resultado del análisis
+  return respuesta;
+},
+
 
   // POST /inventory/bulk_add {items} -> Resultado
   async guardarEntrada(items, proveedor) {
